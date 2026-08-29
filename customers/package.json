@@ -1,0 +1,30 @@
+{
+  "name": "enfasis-i-project-node",
+  "version": "1.0.0",
+  "description": "Este proyecto contiene informacion sobre el proyecto que se llama **car sales API**",
+  "main": "index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js",
+    "seed": "node src/database/seed/run-seed.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/linea-enfasis/enfasis-i-project-node.git"
+  },
+  "keywords": [],
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/linea-enfasis/enfasis-i-project-node/issues"
+  },
+  "homepage": "https://github.com/linea-enfasis/enfasis-i-project-node#readme",
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^5.2.1",
+    "jsonwebtoken": "^9.0.2",
+    "mongoose": "^8.24.4"
+  }
+}
