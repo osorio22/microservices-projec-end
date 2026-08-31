@@ -146,7 +146,7 @@ module.exports = (app) => {
     );
 
     // ==========================================
-    // WISHLIST
+    // WISHLIST - GET
     // ==========================================
 
     app.get(
@@ -172,7 +172,67 @@ module.exports = (app) => {
     );
 
     // ==========================================
-    // CART
+    // WISHLIST - ADD
+    // ==========================================
+
+    app.put(
+        '/customer/wishlist',
+        UserAuth,
+        async (req, res, next) => {
+
+            try {
+
+                const { _id } = req.user;
+                const { product } = req.body;
+
+                const { data } =
+                    await service.AddToWishlist(
+                        _id,
+                        product
+                    );
+
+                return res
+                    .status(200)
+                    .json(data);
+
+            } catch (err) {
+                next(err);
+            }
+        }
+    );
+
+    // ==========================================
+    // WISHLIST - REMOVE
+    // ==========================================
+
+    app.delete(
+        '/customer/wishlist/:productId',
+        UserAuth,
+        async (req, res, next) => {
+
+            try {
+
+                const { _id } = req.user;
+                const { productId } = req.params;
+
+                const { data } =
+                    await service.RemoveFromWishlist(
+                        _id,
+                        productId
+                    );
+
+                return res
+                    .status(200)
+                    .json(data);
+
+            } catch (err) {
+                next(err);
+            }
+        }
+    );
+
+    // ==========================================
+    // CART - GET
     // ==========================================
 
     app.get(
@@ -197,35 +257,40 @@ module.exports = (app) => {
         }
     );
 
-
     // ==========================================
-    // ADD TO CART
+    // CART - ADD
     // ==========================================
 
-        app.post(
-            '/customer/cart/:customerId',
-            UserAuth,
-            async (req, res, next) => {
-                try {
-                    const { customerId } = req.params;
+    app.post(
+        '/customer/cart/:customerId',
+        UserAuth,
+        async (req, res, next) => {
 
-                    const { product, qty } = req.body;
+            try {
 
-                    const { data } = await service.AddToCart(
+                const { customerId } = req.params;
+
+                const {
+                    product,
+                    qty
+                } = req.body;
+
+                const { data } =
+                    await service.AddToCart(
                         customerId,
                         product,
                         qty
                     );
 
-                    return res
-                        .status(200)
-                        .json(data);
+                return res
+                    .status(200)
+                    .json(data);
 
-                } catch (err) {
-                    next(err);
-                }
+            } catch (err) {
+                next(err);
             }
-        );
+        }
+    );
 
     // ==========================================
     // PLACE ORDER
@@ -258,22 +323,27 @@ module.exports = (app) => {
         }
     );
 
-
     // ==========================================
-    // REMOVE FROM CART
+    // CART - REMOVE
     // ==========================================
 
     app.delete(
         '/customer/cart/:customerId/:productId',
         UserAuth,
         async (req, res, next) => {
-            try {
-                const { customerId, productId } = req.params;
 
-                const { data } = await service.RemoveFromCart(
+            try {
+
+                const {
                     customerId,
                     productId
-                );
+                } = req.params;
+
+                const { data } =
+                    await service.RemoveFromCart(
+                        customerId,
+                        productId
+                    );
 
                 return res
                     .status(200)

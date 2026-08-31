@@ -13,6 +13,8 @@ services:
       - /app/node_modules
     depends_on:
       - customers-db
+    networks:
+      - microservices-network
 
   customers-db:
     container_name: c-customers-db
@@ -21,6 +23,12 @@ services:
       - "27018:27017"
     volumes:
       - customers-data:/data/db
+    networks:
+      - microservices-network
 
 volumes:
   customers-data:
+
+networks:
+  microservices-network:
+    external: true

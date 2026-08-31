@@ -116,4 +116,34 @@ module.exports = (app) => {
             }
         }
     );
+
+        // ==========================================
+    // SHOPPING DETAILS
+    // ==========================================
+
+        app.get(
+            '/customer/shopping-details',
+            UserAuth,
+            async (req, res, next) => {
+
+                try {
+
+                    const { _id: customerId } = req.user;
+
+                    const token = req.headers.authorization
+                        ?.replace('Bearer ', '');
+
+                    const { data } = await service.GetCart(
+                        customerId,
+                        token
+                    );
+
+                    return res.status(200).json(data);
+
+                } catch (err) {
+                    next(err);
+                }
+            }
+        );
+
 };  

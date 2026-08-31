@@ -3,11 +3,9 @@ const { APIError, BadRequestError } = require('../../utils/app-errors');
 
 class CustomerRepository {
 
-
     async GetAllCustomers() {
-         return CustomerModel.find().select('-password -salt');
+        return CustomerModel.find().select('-password -salt');
     }
-
 
     async CreateCustomer({ email, password, phone, salt }) {
         try {
@@ -18,6 +16,7 @@ class CustomerRepository {
                 phone
             });
         } catch (err) {
+
             if (err.code === 11000) {
                 throw new BadRequestError('Email already registered');
             }
@@ -37,13 +36,17 @@ class CustomerRepository {
     // ==========================================
     // GET ALL CUSTOMERS
     // ==========================================
+
     async GetCustomers() {
-        return CustomerModel.find({}).populate('address');
+        return CustomerModel
+            .find({})
+            .populate('address');
     }
 
     // ==========================================
     // ADD ADDRESS
     // ==========================================
+
     async AddNewAddress(
         customerId,
         { street, postalCode, city, country }
@@ -71,6 +74,7 @@ class CustomerRepository {
     // ==========================================
     // GET PROFILE
     // ==========================================
+
     async GetProfile(customerId) {
         return CustomerModel
             .findById(customerId)
@@ -80,6 +84,7 @@ class CustomerRepository {
     // ==========================================
     // GET WISHLIST
     // ==========================================
+
     async GetWishList(customerId) {
         const customer = await CustomerModel.findById(customerId);
 
@@ -93,6 +98,7 @@ class CustomerRepository {
     // ==========================================
     // ADD TO WISHLIST
     // ==========================================
+
     async AddToWishlist(customerId, product) {
         const customer = await CustomerModel.findById(customerId);
 
@@ -102,9 +108,20 @@ class CustomerRepository {
 
         const productId = product._id.toString();
 
-        if (!customer.wishlist.some((item) => item._id === productId)) {
+        const existingItem = customer.wishlist.find(
+            (item) => item._id.toString() === productId
+        );
+
+        if (!existingItem) {
+
+            // product puede ser un documento Mongoose
+            // o un objeto JSON recibido desde otro microservicio
+            const productData = product.toObject
+                ? product.toObject()
+                : product;
+
             customer.wishlist.push({
-                ...product.toObject(),
+                ...productData,
                 _id: productId
             });
 
@@ -117,6 +134,7 @@ class CustomerRepository {
     // ==========================================
     // REMOVE FROM WISHLIST
     // ==========================================
+
     async RemoveFromWishlist(customerId, productId) {
         const customer = await CustomerModel.findById(customerId);
 
@@ -125,7 +143,7 @@ class CustomerRepository {
         }
 
         customer.wishlist = customer.wishlist.filter(
-            (item) => item._id !== productId
+            (item) => item._id.toString() !== productId.toString()
         );
 
         await customer.save();
@@ -136,6 +154,7 @@ class CustomerRepository {
     // ==========================================
     // ADD TO CART
     // ==========================================
+
     async AddToCart(customerId, product, qty) {
         const customer = await CustomerModel.findById(customerId);
 
@@ -143,18 +162,35 @@ class CustomerRepository {
             throw new BadRequestError('Customer not found');
         }
 
+        if (!product || !product._id) {
+            throw new BadRequestError('Product is required');
+        }
+
         const productId = product._id.toString();
 
         const existingItem = customer.cart.find(
-            (item) => item.product._id === productId
+            (item) =>
+                item.product &&
+                item.product._id &&
+                item.product._id.toString() === productId
         );
 
         if (existingItem) {
+
+            // Si el producto ya existe, actualizamos la cantidad
             existingItem.unit = qty;
+
         } else {
+
+            // product puede ser un documento Mongoose
+            // o un objeto JSON recibido desde Shopping
+            const productData = product.toObject
+                ? product.toObject()
+                : product;
+
             customer.cart.push({
                 product: {
-                    ...product.toObject(),
+                    ...productData,
                     _id: productId
                 },
                 unit: qty
@@ -169,6 +205,7 @@ class CustomerRepository {
     // ==========================================
     // REMOVE FROM CART
     // ==========================================
+
     async RemoveFromCart(customerId, productId) {
         const customer = await CustomerModel.findById(customerId);
 
@@ -177,7 +214,9 @@ class CustomerRepository {
         }
 
         customer.cart = customer.cart.filter(
-            (item) => item.product._id !== productId
+            (item) =>
+                !item.product ||
+                item.product._id.toString() !== productId.toString()
         );
 
         await customer.save();
@@ -188,6 +227,7 @@ class CustomerRepository {
     // ==========================================
     // GET CART
     // ==========================================
+
     async GetCart(customerId) {
         const customer = await CustomerModel.findById(customerId);
 
@@ -201,6 +241,7 @@ class CustomerRepository {
     // ==========================================
     // PLACE ORDER
     // ==========================================
+
     async PlaceOrder(customerId, order) {
         const customer = await CustomerModel.findById(customerId);
 
@@ -218,3 +259,4 @@ class CustomerRepository {
 }
 
 module.exports = CustomerRepository;
+
