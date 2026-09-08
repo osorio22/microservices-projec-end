@@ -1,503 +1,341 @@
-# Proyecto de Microservicios
+# Proyecto de Microservicios — Car Sales API
 
-Proyecto desarrollado utilizando una arquitectura de microservicios para gestionar clientes, productos y compras.
+[![CI](https://github.com/osorio22/microservices-projec-end/actions/workflows/ci.yml/badge.svg)](https://github.com/osorio22/microservices-projec-end/actions/workflows/ci.yml)
 
-## Tecnologías utilizadas
+API de venta de autos construida con una arquitectura de microservicios.
+Cada servicio es independiente, tiene su propia base de datos MongoDB y se
+comunica con los demás únicamente mediante peticiones HTTP.
 
-* Node.js
+```text
+CLIENTE (frontend React / curl)
+        │
+        ▼
+   GATEWAY :8000    ← punto único de entrada
+        │
+   ┌────┼────┬────┐
+   ▼    ▼    ▼    ▼
+Customers Products Shopping
+   │      │      │
+   ▼      ▼      ▼
+  DB     DB     DB
+```
+
+## Tecnologías
+
+* Node.js (v22+)
 * Express.js
-* MongoDB
+* MongoDB 7
 * Mongoose
-* Docker
-* Docker Compose
-* Axios
-* JWT
-* Git
-* GitHub
+* JWT (`jsonwebtoken`)
+* Docker + Docker Compose
+* Jest + Supertest + mongodb-memory-server (tests)
+* React + Vite + Redux (frontend)
 
 ---
 
-# 1. Arquitectura del proyecto
+## 1. Arquitectura
 
-El proyecto está dividido en tres microservicios principales:
+Cuatro servicios publicados en Docker:
 
-* **Customers:** gestión de clientes y autenticación.
-* **Products:** gestión de productos.
-* **Shopping:** gestión de compras y órdenes.
-
-Cada microservicio funciona de manera independiente y cuenta con su propia base de datos.
+| Servicio  | Puerto | Base de datos         | Función                                    |
+| --------- | :----: | --------------------- | ------------------------------------------ |
+| Gateway   | 8000   | —                     | Punto de entrada y composición del perfil  |
+| Customers | 8003   | MongoDB `customers`   | Clientes y autenticación (JWT)             |
+| Products  | 8002   | MongoDB `products`    | Catálogo de autos                          |
+| Shopping  | 8004   | MongoDB `shopping`    | Carrito y órdenes de compra                |
 
 ```mermaid
 flowchart LR
-    CLIENTE[Cliente]
+    CLI[Cliente]
 
-    CLIENTE --> C[Customers :8003]
-    CLIENTE --> P[Products :8002]
-    CLIENTE --> S[Shopping :8004]
+    CLI --> GW[Gateway :8000]
+    GW --> C[Customers :8003]
+    GW --> P[Products :8002]
+    GW --> S[Shopping :8004]
 
     C --> DB1[(MongoDB Customers)]
     P --> DB2[(MongoDB Products)]
     S --> DB3[(MongoDB Shopping)]
 
-    S --> C
-    S --> P
+    C -. consulta auto .-> P
+    S -. carrito / orden .-> C
 ```
 
----
+Todos los contenedores comparten la red Docker externa `microservices-network`
+y se resuelven entre sí por nombre (`c-customers`, `c-products`, `c-shopping`).
+Los servicios usan `fetch` nativo de Node.js para comunicarse entre ellos.
 
-# 2. Servicios del proyecto
-
-| Servicio  | Puerto | Base de datos     | Función                  |
-| --------- | -----: | ----------------- | ------------------------ |
-| Customers | `8003` | MongoDB Customers | Clientes y autenticación |
-| Products  | `8002` | MongoDB Products  | Gestión de productos     |
-| Shopping  | `8004` | MongoDB Shopping  | Compras y órdenes        |
+> El Gateway es el único servicio que publica puertos hacia el frontend.
+> La comunicación entre microservicios **nunca** accede directamente a la
+> base de datos de otro servicio.
 
 ---
 
-# 3. Estructura del proyecto
+## 2. Estructura del proyecto
 
 ```text
 microservices-projec-end/
 │
-├── Customers/
+├── gateway/
+│   ├── src/
+│   │   ├── compose-profile.js   ← perfil + carrito
+│   │   ├── routes.js            ← rutas y proxy
+│   │   └── config/
+│   ├── Dockerfile
+│   └── docker-compose.yml
+│
+├── customers/
+│   ├── src/
+│   │   ├── api/                 ← rutas y middleware de auth
+│   │   ├── config/
+│   │   ├── database/
+│   │   │   ├── models/
+│   │   │   ├── repository/
+│   │   │   └── seed/
+│   │   ├── services/
+│   │   └── utils/
+│   ├── __tests__/unit/
+│   ├── __tests__/integration/
+│   ├── Dockerfile
+│   └── docker-compose.yml
+│
+├── Product/
 │   ├── src/
 │   │   ├── api/
 │   │   ├── config/
-│   │   ├── database/
+│   │   ├── database/{models, repository, seed}/
 │   │   ├── services/
 │   │   └── utils/
+│   ├── __tests__/unit/
+│   ├── __tests__/integration/
 │   ├── Dockerfile
-│   ├── package.json
-│   └── package-lock.json
+│   └── docker-compose.yml
 │
-├── Products/
-│   ├── src/
-│   │   ├── api/
-│   │   ├── config/
-│   │   ├── database/
-│   │   ├── services/
-│   │   └── utils/
-│   ├── Dockerfile
-│   ├── package.json
-│   └── package-lock.json
-│
-├── shopping/
-│   ├── src/
-│   │   ├── api/
-│   │   ├── config/
-│   │   ├── database/
-│   │   ├── services/
-│   │   └── utils/
-│   ├── Dockerfile
-│   ├── package.json
-│   └── package-lock.json
-│
-└── docker-compose.yml
-```
-
-Para consultar los archivos de un servicio:
-
-```bash
-find src -type f | sort
+└── shopping/
+    ├── src/
+    │   ├── api/
+    │   ├── config/
+    │   ├── database/{models, repository}/
+    │   ├── services/
+    │   └── utils/
+    ├── __tests__/unit/
+    ├── __tests__/integration/
+    ├── Dockerfile
+    └── docker-compose.yml
 ```
 
 ---
 
-# 4. Instalación inicial
+## 3. Puesta en marcha
 
-## WSL
+### 3.1 Requisitos
 
-Desde PowerShell como administrador:
-
-```bash
-wsl --install
-```
-
-Después de la instalación puede ser necesario reiniciar el computador.
-
-Actualizar WSL:
+* WSL2 + Ubuntu
+* Docker Engine + Docker Compose (`docker compose`)
+* Una red Docker compartida (se crea una sola vez):
 
 ```bash
-wsl --update
+docker network create microservices-network
 ```
 
-## Ubuntu
+### 3.2 Levantar los servicios
 
-Actualizar los paquetes:
+Cada servicio tiene su propio `docker-compose.yml` en su carpeta:
 
 ```bash
-sudo apt update
-sudo apt upgrade
+cd microservices-projec-end
+
+cd customers && docker compose up -d --build && cd ..
+cd Product   && docker compose up -d --build && cd ..
+cd shopping  && docker compose up -d --build && cd ..
+cd gateway   && docker compose up -d --build && cd ..
 ```
 
-Instalar npm:
+> **Importante para el Gateway:** su carpeta **no** está montada como volumen.
+> Si modificas su código hay que reconstruirlo:
+> `cd gateway && docker compose up -d --build`.
 
-```bash
-sudo apt install npm
-```
+Para levantar todos a la vez (si tienes un compose raíz) o en segundo plano:
+`docker compose up -d` desde cada carpeta.
 
-Instalar jq:
-
-```bash
-sudo apt install jq
-```
-
-`jq` permite visualizar las respuestas JSON de una forma más organizada.
-
----
-
-# 5. Crear un proyecto Node.js
-
-Crear una carpeta:
-
-```bash
-mkdir microserviciosperez
-```
-
-Entrar en la carpeta:
-
-```bash
-cd microserviciosperez
-```
-
-Inicializar Node.js:
-
-```bash
-npm init -y
-```
-
-Instalar Express:
-
-```bash
-npm install express
-```
-
-Instalar Mongoose:
-
-```bash
-npm install mongoose
-```
-
-Verificar Mongoose:
-
-```bash
-npm list mongoose
-```
-
-Instalar dotenv:
-
-```bash
-npm install dotenv
-```
-
-Instalar Axios:
-
-```bash
-npm install axios
-```
-
-Ejecutar el proyecto:
-
-```bash
-npm run dev
-```
-
----
-
-# 6. Git y GitHub
-
-Agregar el repositorio remoto:
-
-```bash
-git remote add origin https://github.com/osorio22/backend-mono-api.git
-```
-
-Verificar el repositorio:
-
-```bash
-git remote -v
-```
-
-Agregar los cambios:
-
-```bash
-git add .
-```
-
-Crear un commit:
-
-```bash
-git commit -m "Actualización del proyecto"
-```
-
-Subir los cambios:
-
-```bash
-git push origin main
-```
-
-## Seguridad
-
-Nunca subir información sensible a GitHub.
-
-No subir:
-
-```text
-.env
-Contraseñas
-Tokens
-JWT
-Claves privadas
-Credenciales
-```
-
-Agregar `.env` al archivo `.gitignore`:
-
-```gitignore
-node_modules/
-.env
-```
-
-Si un token real fue publicado anteriormente, debe ser revocado y reemplazado.
-
----
-
-# 7. Docker Compose
-
-Docker Compose permite ejecutar los diferentes servicios del proyecto.
-
-## Ver los contenedores
-
-```bash
-docker compose ps
-```
-
-También:
+Verificar que los contenedores estén arriba:
 
 ```bash
 docker ps
 ```
 
-## Levantar los servicios
-
-```bash
-docker compose up
-```
-
-## Levantar en segundo plano
-
-```bash
-docker compose up -d
-```
-
-## Levantar reconstruyendo las imágenes
-
-```bash
-docker compose up --build -d
-```
-
-## Detener los servicios
-
-```bash
-docker compose down
-```
-
-## Ver todos los contenedores
-
-```bash
-docker ps -a
-```
-
----
-
-# 8. Reconstruir Docker
-
-Si se realizaron cambios importantes en el código o Dockerfile:
-
-```bash
-docker compose build --no-cache
-```
-
-Después:
-
-```bash
-docker compose up -d
-```
-
-Para reconstruir únicamente Customers:
-
-```bash
-docker compose build --no-cache customer
-```
-
-Después:
-
-```bash
-docker compose up -d customer
-```
-
-También se puede utilizar:
-
-```bash
-docker compose up --build -d
-```
-
----
-
-# 9. Eliminar contenedores y volúmenes
-
-Para detener y eliminar los contenedores:
-
-```bash
-docker compose down
-```
-
-Para eliminar también los volúmenes y contenedores huérfanos:
-
-```bash
-docker compose down -v --remove-orphans
-```
-
-## Importante
-
-El comando:
-
-```bash
-docker compose down -v
-```
-
-puede eliminar los volúmenes de MongoDB.
-
-Esto puede provocar pérdida de los datos almacenados.
-
-Utilizarlo solamente cuando sea necesario.
-
----
-
-# 10. Customers
-
-Customers administra los clientes y el sistema de autenticación.
-
-```mermaid
-flowchart LR
-    A[Cliente] --> B[Customers :8003]
-    B --> C[(MongoDB Customers)]
-```
-
-## Ver logs
-
-```bash
-docker logs c-customers
-```
-
-Últimas 30 líneas:
-
-```bash
-docker logs c-customers --tail 30
-```
-
-Un resultado correcto debería mostrar:
+Deberían aparecer:
 
 ```text
-Database connected
-Listening on port 8003
+c-gateway     (8000)
+c-customers   (8003)      c-customers-db   (27018)
+c-products    (8002)      c-products-db    (27017)
+c-shopping    (8004)      c-shopping-db    (27019)
+```
+
+Detener:
+
+```bash
+docker compose down        # desde cada carpeta
+docker compose down -v --remove-orphans   # ⚠️ borra también los datos de MongoDB
 ```
 
 ---
 
-# 11. MongoDB — Customers
+## 4. Seeds (datos de ejemplo)
 
-Entrar a MongoDB:
+### Products — catálogo de autos
+
+El seed carga 10 vehículos de marca (BMW, Mercedes-Benz y Chevrolet:
+BMW Serie 5, BMW X5 M, BMW M3 Competition, Mercedes‑Benz Clase C, GLE 350,
+AMG A45, Chevrolet Cheyenne 4x4, Colorado Z71, Camaro SS y Corvette Stingray).
 
 ```bash
-docker exec -it c-customers-db mongosh
+docker exec c-products npm run seed -- --force
 ```
 
-Seleccionar la base de datos:
+### Customers — usuarios de prueba
 
-```javascript
-use customers
+Crea los usuarios `juan@example.com`, `maria@example.com` y `carlos@example.com`
+(contraseña: `123456`).
+
+```bash
+docker exec c-customers npm run seed -- --force
 ```
 
-Ver las colecciones:
+### Shopping
 
-```javascript
-show collections
-```
-
-Consultar clientes:
-
-```javascript
-db.customers.find().pretty()
-```
-
-Contar clientes:
-
-```javascript
-db.customers.countDocuments()
-```
+Shopping **no** tiene seed: sus órdenes se generan al hacer compras.
 
 ---
 
-# 12. Consultar Customers desde Docker
+## 5. Gateway (puerto 8000)
+
+Es la puerta de entrada para el frontend. Los comandos `curl` de ejemplo usan
+el Gateway; los puertos directos de cada servicio aparecen en su sección.
+
+| Método | Ruta del Gateway               | Reenvía a            | Descripción                              |
+| ------ | ------------------------------ | -------------------- | ---------------------------------------- |
+| GET    | `/`                            | Products             | Lista de autos `{ products, categories }`|
+| GET    | `/:id`                         | Products             | Detalle de un auto                       |
+| GET    | `/customer/profile`            | Customers + Shopping | Perfil del cliente **combinado** con su carrito |
+| GET    | `/customer/shopping-details`   | Shopping             | Carrito de un cliente                    |
+| PUT    | `/cart`                        | Shopping             | Agregar un auto al carrito |
+| DELETE | `/cart/:productId`             | Shopping             | Quitar un auto del carrito |
+| POST   | `/shopping/order`              | Shopping             | Crear la orden de compra |
+| POST   | `/customer/login`              | Customers            | Login (devuelve JWT) |
+| POST   | `/customer/signup`             | Customers            | Registrar cliente |
+| GET    | `/customer/*`, `/wishlist*`    | Customers            | Perfil, wishlist, dirección, etc. |
+
+`GET /customer/profile` combina el perfil del cliente (Customers) con su
+carrito (Shopping) en **una sola respuesta** (`compose-profile.js`).
+
+Ejemplo rápido por el Gateway:
 
 ```bash
-docker exec c-customers-db mongosh customers --quiet --eval 'print(EJSON.stringify(db.customers.find().toArray()))' | jq
-```
-
----
-
-# 13. Probar la API de Customers
-
-Consultar clientes:
-
-```bash
-curl http://localhost:8003/customer | jq
-```
-
----
-
-# 14. Login de Customers
-
-Ejemplo:
-
-```bash
-curl -X POST http://localhost:8003/customer/login \
+# 1. Login → guarda el token
+TOKEN=$(curl -s -X POST http://localhost:8000/customer/login \
   -H "Content-Type: application/json" \
-  -d '{"email":"juan@example.com","password":"123456"}' | jq
+  -d '{"email":"juan@example.com","password":"123456"}' | jq -r .token)
+
+# 2. Perfil compuesto (cliente + carrito)
+curl -s http://localhost:8000/customer/profile -H "Authorization: Bearer $TOKEN" | jq
+
+# 3. Agregar un auto al carrito
+curl -s -X PUT http://localhost:8000/cart \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"_id":"ID_DEL_AUTO","qty":1}' | jq
+
+# 4. Realizar el pedido (registra la orden y vacía el carrito)
+curl -s -X POST http://localhost:8000/shopping/order \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"txnId":"TX-001"}' | jq
 ```
-
-Si las credenciales son correctas, el servicio debe devolver un JWT.
-
-Ejemplo:
-
-```json
-{
-  "token": "TU_TOKEN_AQUI"
-}
-```
-
-No publicar el JWT real en GitHub.
 
 ---
 
-# 15. Autenticación mediante JWT
+## 6. API por servicio
 
-Guardar temporalmente el token:
+### 6.1 Customers (8003)
 
-```bash
-TOKEN='TU_TOKEN_AQUI'
+| Método | Ruta                                      | Auth | Descripción |
+| ------ | ----------------------------------------- | :--: | ----------- |
+| GET    | `/customer` / `/customer/all`             |  ✗   | Lista de clientes |
+| POST   | `/customer/signup`                        |  ✗   | Registro → `{ id, token }` |
+| POST   | `/customer/login`                         |  ✗   | Login → `{ id, token }` |
+| GET    | `/customer/profile`                       |  ✓   | Perfil del cliente |
+| GET    | `/customer/shopping-details`              |  ✓   | `{ cart, wishlist, orders }` |
+| GET    | `/customer/wishlist`                      |  ✓   | Wishlist |
+| PUT    | `/customer/wishlist`  `{ product }`       |  ✓   | Agregar a wishlist |
+| DELETE | `/customer/wishlist/:productId`           |  ✓   | Quitar de wishlist |
+| GET    | `/customer/cart/:customerId`              |  ✓   | Carrito |
+| POST   | `/customer/cart/:customerId` `{ product, qty }` | ✓ | Agregar al carrito (consulta el auto en Products) |
+| DELETE | `/customer/cart/:customerId/:productId`   |  ✓   | Quitar del carrito |
+| POST   | `/customer/order/:customerId` `{ order }` |  ✓   | Registra la orden y **vacía el carrito** |
+| POST   | `/customer/address`                       |  ✓   | Agregar dirección |
+
+Autenticación: middleware que valida el JWT (`Authorization: Bearer <token>`)
+y lo interpreta con `APP_SECRET`.
+
+### 6.2 Products (8002)
+
+| Método | Ruta             | Descripción |
+| ------ | ---------------- | ----------- |
+| POST   | `/products`      | Crear un auto |
+| GET    | `/products`      | Lista `{ products, categories }` |
+| GET    | `/products/:id`  | Detalle (404 si no existe) |
+
+### 6.3 Shopping (8004)
+
+| Método | Ruta                          | Auth | Descripción |
+| ------ | ----------------------------- | :--: | ----------- |
+| PUT    | `/cart` `{ _id, qty }`        |  ✓   | Agrega al carrito (lo envía a Customers) |
+| DELETE | `/cart/:productId`            |  ✓   | Quita del carrito (lo envía a Customers) |
+| GET    | `/customer/shopping-details`  |  ✓   | Carrito del cliente |
+| POST   | `/shopping/order` `{ txnId }` |  ✓   | Crea la orden en su BD, la registra en Customers (clears cart) |
+
+---
+
+## 7. Comunicación entre microservicios
+
+Los microservicios se llaman entre sí con `fetch` (Node.js nativo), usando el
+nombre del contenedor en la red `microservices-network`:
+
+```text
+customers  →  http://c-products:8002/products/:id   (al agregar al carrito)
+shopping   →  http://c-customers:8003/customer/*     (carrito y órdenes)
+gateway    →  http://host.docker.internal:8002/8003/8004  (proxy HTTP)
 ```
 
-Consultar el perfil:
+```mermaid
+sequenceDiagram
+    participant U as Cliente
+    participant G as Gateway :8000
+    participant S as Shopping :8004
+    participant C as Customers :8003
+    participant P as Products :8002
+
+    U->>G: PUT /cart { auto, qty }
+    G->>S: PUT /cart
+    S->>C: POST /customer/cart/:id { product, qty }
+    C->>P: GET /products/:id
+    P-->>C: auto
+    C-->>S: carrito actualizado
+    S-->>G: carrito
+    G-->>U: 200
+```
+
+---
+
+## 8. Autenticación (JWT)
+
+1. `POST /customer/login` con `email` y `password` → devuelve `{ id, token }`.
+2. El token se envía en cada petición protegida:
 
 ```bash
-curl -s http://localhost:8003/customer/profile \
+curl -s http://localhost:8000/customer/profile \
   -H "Authorization: Bearer $TOKEN" | jq
 ```
-
-Flujo de autenticación:
 
 ```mermaid
 sequenceDiagram
@@ -507,724 +345,188 @@ sequenceDiagram
 
     C->>CU: POST /customer/login
     CU-->>C: JWT
-    C->>API: Authorization: Bearer TOKEN
+    C->>API: Authorization: Bearer JWT
     API-->>C: Respuesta autorizada
 ```
 
----
-
-# 16. Products
-
-Products administra los productos disponibles.
-
-```mermaid
-flowchart LR
-    A[Cliente] --> B[Products :8002]
-    B --> C[(MongoDB Products)]
-```
-
-## Ver logs
-
-```bash
-docker logs c-products
-```
-
-Últimas 30 líneas:
-
-```bash
-docker logs c-products --tail 30
-```
-
-## Probar Products
-
-```bash
-curl http://localhost:8002/products | jq
-```
-
-## Ver archivos
-
-```bash
-find src -type f | sort
-```
+> Nunca subas a GitHub el archivo `.env`, tokens ni contraseñas reales.
 
 ---
 
-# 17. Seed de Products
+## 9. Base de datos
 
-Ejecutar desde el proyecto:
-
-```bash
-npm run seed
-```
-
-Forzar el seed:
-
-```bash
-npm run seed -- --force
-```
-
-Desde Docker:
-
-```bash
-docker exec c-products npm run seed -- --force
-```
-
----
-
-# 18. Seed de Customers
-
-Ejecutar:
-
-```bash
-npm run seed
-```
-
-Desde Docker:
-
-```bash
-docker exec c-customers npm run seed -- --force
-```
-
----
-
-# 19. Shopping
-
-Shopping administra las compras y órdenes.
-
-Shopping funciona en el puerto:
+Cada servicio usa su propia instancia MongoDB y colecciones:
 
 ```text
-8004
+customers  →  db.customers         (cuenta con cart, wishlist, orders, address)
+products   →  db.products
+shopping   →  db.orders
 ```
 
-Además, **Shopping tiene su propia base de datos MongoDB**, independiente de Customers y Products.
-
-```mermaid
-flowchart LR
-    A[Cliente] --> B[Shopping :8004]
-    B --> C[(MongoDB Shopping)]
-```
-
----
-
-# 20. Arquitectura completa de Shopping
-
-Shopping puede comunicarse con Customers y Products mediante peticiones HTTP.
-
-```mermaid
-flowchart LR
-    CLIENTE[Cliente]
-
-    SHOP[Shopping :8004]
-    CUSTOMERS[Customers :8003]
-    PRODUCTS[Products :8002]
-
-    DB_SHOP[(MongoDB Shopping)]
-    DB_CUSTOMERS[(MongoDB Customers)]
-    DB_PRODUCTS[(MongoDB Products)]
-
-    CLIENTE --> SHOP
-
-    SHOP --> DB_SHOP
-    SHOP -->|HTTP / Axios| CUSTOMERS
-    SHOP -->|HTTP / Axios| PRODUCTS
-
-    CUSTOMERS --> DB_CUSTOMERS
-    PRODUCTS --> DB_PRODUCTS
-```
-
-De esta forma:
-
-```text
-Customers
-    │
-    └── MongoDB Customers
-
-Products
-    │
-    └── MongoDB Products
-
-Shopping
-    │
-    └── MongoDB Shopping
-```
-
-Cada microservicio mantiene su propia información.
-
----
-
-# 21. Seed de Shopping
-
-Si el servicio tiene configurado el script `seed`:
+Consultar desde Docker:
 
 ```bash
-docker exec c-shopping npm run seed -- --force
-```
-
----
-
-# 22. Ver logs de Shopping
-
-```bash
-docker logs c-shopping
-```
-
-Últimas 30 líneas:
-
-```bash
-docker logs c-shopping --tail 30
-```
-
----
-
-# 23. Probar Shopping
-
-Shopping funciona mediante el puerto `8004`.
-
-Ejemplo de creación de una orden:
-
-```bash
-curl -X POST http://localhost:8004/shopping/order \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"txnId":"123456"}'
-```
-
-La ruta y los datos exactos pueden variar dependiendo de la implementación actual del servicio.
-
----
-
-# 24. MongoDB — Shopping
-
-El nombre del contenedor de MongoDB para Shopping dependerá del `docker-compose.yml`.
-
-Por ejemplo, si está configurado como:
-
-```text
-c-shopping-db
-```
-
-se puede entrar con:
-
-```bash
+# Customers (host 27018)
+docker exec -it c-customers-db mongosh
+# Products (host 27017)
+docker exec -it c-products-db mongosh
+# Shopping (host 27019)
 docker exec -it c-shopping-db mongosh
 ```
 
-Después seleccionar la base de datos:
+Dentro de mongosh:
 
 ```javascript
-use shopping
-```
-
-Ver colecciones:
-
-```javascript
+show databases
+use customers            // o products / shopping
 show collections
+db.customers.find().pretty()   // o db.products / db.orders
 ```
-
-Consultar órdenes:
-
-```javascript
-db.orders.find().pretty()
-```
-
-> El nombre exacto de la colección dependerá de los modelos utilizados en el microservicio Shopping.
 
 ---
 
-# 25. Axios y comunicación entre servicios
+## 10. Tests
 
-Axios permite realizar peticiones HTTP desde Node.js.
-
-Instalar:
+Cada servicio tiene tests **unit** y **integration** (Jest + Supertest).
+Los tests de integración usan **mongodb-memory-server** (la primera ejecución
+descarga el binario automáticamente) y tokens JWT reales.
 
 ```bash
-npm install axios
+# desde cada carpeta: customers / Product / shopping
+npm install              # una sola vez
+
+npm run test:unit        # API, servicios, repositorios, auth y utilidades
+npm run test:integration # API real + MongoDB real (registro, login, carrito, órdenes, catálogo)
+npm test                 # ambos
 ```
 
-La comunicación puede representarse de la siguiente manera:
+Cobertura actual:
 
-```mermaid
-flowchart LR
-    SHOP[Shopping]
-    CUS[Customers]
-    PRO[Products]
-
-    SHOP -->|HTTP / Axios| CUS
-    SHOP -->|HTTP / Axios| PRO
-```
-
-Shopping puede consultar información de clientes y productos mediante sus APIs.
-
-Los microservicios no deberían acceder directamente a las bases de datos de otros servicios.
+* Customers: 10 tests de integración (signup, login, perfil, wishlist, carrito, orden, dirección).
+* Shopping:  8 tests de integración (auth, `PUT/DELETE /cart`, `shopping-details`, `POST /shopping/order` con persistencia real y carrito vacío).
+* Products:  5 tests de integración (listar, crear, detalle y 404).
 
 ---
 
-# 26. Puertos del proyecto
+## 11. Frontend
 
-| Servicio          |   Puerto |
-| ----------------- | -------: |
-| Products          |   `8002` |
-| Customers         |   `8003` |
-| Shopping          |   `8004` |
-| Products MongoDB  |  `27017` |
-| Customers MongoDB |  `27018` |
-| Shopping MongoDB  | `27019`* |
+El frontend es una app **React + Vite + Redux** ubicada fuera de este repo:
+`home/juanito1/proyectos/frontend-enfasis-i`.
 
-* El puerto externo de MongoDB Shopping debe coincidir con la configuración real de `docker-compose.yml`.
+* Su `baseURL` apunta al Gateway: `http://localhost:8000`
+  (variable `VITE_API_URL`, si no está definida usa `http://localhost:8000`).
+* `src/utils/productImage.js` mapea la marca del auto (BMW, Mercedes, Camaro,
+  Chevrolet, …) a fotos de Unsplash; si no reconoce la marca asigna una foto
+  aleatoria de un carro de marca.
 
----
-
-# 27. Comprobar todos los contenedores
-
-Ejecutar:
+Levantarlo:
 
 ```bash
-docker compose ps
-```
-
-También:
-
-```bash
-docker ps
-```
-
-Los contenedores principales deberían ser similares a:
-
-```text
-c-customers
-c-customers-db
-c-products
-c-products-db
-c-shopping
-c-shopping-db
+cd ../frontend-enfasis-i
+npm install
+npm run dev      # http://localhost:5173
 ```
 
 ---
 
-# 28. Verificar Customers
+## 12. Verificación y solución de problemas
+
+Ver logs:
 
 ```bash
 docker logs c-customers --tail 30
+docker logs c-products  --tail 30
+docker logs c-shopping  --tail 30
+docker logs c-gateway   --tail 30
 ```
 
-Debe aparecer:
+Un arranque correcto de Customers/Shopping muestra:
 
 ```text
 Database connected
-Listening on port 8003
+Listening on port 8003   # (8002 / 8004 según el servicio)
 ```
 
-Probar:
+Cambios en el código de `customers`, `Product` o `shopping` se aplican al
+reiniciar el contenedor (código montado como volumen):
 
 ```bash
-curl http://localhost:8003/customer | jq
+docker restart c-customers
+docker restart c-products
+docker restart c-shopping
 ```
 
----
-
-# 29. Verificar Products
-
-Ver logs:
+El Gateway requiere reconstrucción:
 
 ```bash
-docker logs c-products --tail 30
+cd gateway && docker compose up -d --build
 ```
 
-Probar:
+Si algo no responde:
+
+1. `docker ps` — ¿están los 4 servicios y los 3 mongo arriba?
+2. `docker network ls` — ¿existe `microservices-network`?
+3. Revisa los logs de cada servicio (sección anterior).
+4. Prueba cada API directa: `curl http://localhost:8002/products | jq`,
+   `curl http://localhost:8003/customer | jq`,
+   `curl -X POST http://localhost:8000/customer/login -H "Content-Type: application/json" -d '{"email":"juan@example.com","password":"123456"}'`.
+5. Como último recurso (⚠️ borra los volúmenes de MongoDB):
 
 ```bash
-curl http://localhost:8002/products | jq
-```
-
----
-
-# 30. Verificar Shopping
-
-Ver logs:
-
-```bash
-docker logs c-shopping --tail 30
-```
-
-Probar el servicio:
-
-```bash
-curl http://localhost:8004
-```
-
-Si una ruta requiere autenticación:
-
-```bash
--H "Authorization: Bearer $TOKEN"
+cd customers && docker compose down -v --remove-orphans && docker compose up -d --build
+cd Product   && docker compose down -v --remove-orphans && docker compose up -d --build
+cd shopping  && docker compose down -v --remove-orphans && docker compose up -d --build
+cd gateway   && docker compose down -v --remove-orphans && docker compose up -d --build
 ```
 
 ---
 
-# 31. Secuencia recomendada cuando algo falla
+## 13. Puertos
 
-No eliminar los contenedores inmediatamente.
-
-Primero revisar:
-
-```bash
-docker compose ps
-```
-
-Customers:
-
-```bash
-docker logs c-customers --tail 30
-```
-
-Products:
-
-```bash
-docker logs c-products --tail 30
-```
-
-Shopping:
-
-```bash
-docker logs c-shopping --tail 30
-```
-
-Probar Customers:
-
-```bash
-curl http://localhost:8003/customer | jq
-```
-
-Probar Products:
-
-```bash
-curl http://localhost:8002/products | jq
-```
-
-Probar Shopping:
-
-```bash
-curl http://localhost:8004
-```
-
-Si el problema continúa:
-
-```bash
-docker compose down
-```
-
-```bash
-docker compose build --no-cache
-```
-
-```bash
-docker compose up -d
-```
+| Servicio             | Puerto de la API | MongoDB (host) |
+| -------------------- | :--------------: | :------------: |
+| Gateway              | `8000`           | —              |
+| Products             | `8002`           | `27017`        |
+| Customers            | `8003`           | `27018`        |
+| Shopping             | `8004`           | `27019`        |
 
 ---
 
-# 32. Comandos principales
-
-## Docker
+## 14. Comandos útiles
 
 ```bash
-docker compose ps
-docker compose up -d
-docker compose down
-docker compose up --build -d
-docker compose build --no-cache
+# Docker
 docker ps
-docker ps -a
-```
+docker compose logs -f
+docker restart c-customers c-products c-shopping
 
-## Logs
+# Seeds
+docker exec c-products  npm run seed -- --force
+docker exec c-customers npm run seed -- --force
 
-```bash
-docker logs c-customers
-docker logs c-products
-docker logs c-shopping
-```
+# Tests (desde la carpeta de cada servicio)
+npm run test:unit
+npm run test:integration
 
-## Customers
-
-```bash
-curl http://localhost:8003/customer | jq
-```
-
-## Products
-
-```bash
+# APIs
 curl http://localhost:8002/products | jq
-```
-
-## Shopping
-
-```bash
-curl http://localhost:8004
-```
-
-## MongoDB Customers
-
-```bash
-docker exec -it c-customers-db mongosh
-```
-
-## MongoDB Products
-
-```bash
-docker exec -it c-products-db mongosh
-```
-
-## MongoDB Shopping
-
-```bash
-docker exec -it c-shopping-db mongosh
-```
-
-## Seeds
-
-```bash
-npm run seed
-npm run seed -- --force
-```
-
-## Estructura
-
-```bash
-find src -type f | sort
+curl http://localhost:8000/customer/login -X POST -H "Content-Type: application/json" -d '{"email":"juan@example.com","password":"123456"}'
 ```
 
 ---
 
-# 33. Flujo completo del proyecto
+## Conclusión
 
-```mermaid
-flowchart TD
-    CLIENTE[Cliente]
+El proyecto implementa una arquitectura de microservicios (Gateway, Customers,
+Products y Shopping) con Node.js, Express, MongoDB y Docker Compose. Cada
+servicio es independiente y posee su propia base de datos; la comunicación se
+realiza exclusivamente por HTTP a través de una red Docker compartida, con
+autenticación JWT y una suite de tests unitarios e de integración.
 
-    CLIENTE --> CUSTOMERS[Customers :8003]
-    CLIENTE --> PRODUCTS[Products :8002]
-    CLIENTE --> SHOPPING[Shopping :8004]
+**Proyecto:** Microservicios Car Sales API
 
-    CUSTOMERS --> DB1[(MongoDB Customers)]
-    PRODUCTS --> DB2[(MongoDB Products)]
-    SHOPPING --> DB3[(MongoDB Shopping)]
+**Servicios:** Gateway · Customers · Products · Shopping
 
-    SHOPPING --> CUSTOMERS
-    SHOPPING --> PRODUCTS
-```
+**Puertos:** 8000 · 8002 · 8003 · 8004 · (Mongo 27017/27018/27019)
 
----
-
-# 34. Flujo de una compra
-
-```mermaid
-sequenceDiagram
-    participant U as Cliente
-    participant S as Shopping
-    participant C as Customers
-    participant P as Products
-    participant DB as MongoDB Shopping
-
-    U->>S: Crear orden
-
-    S->>C: Verificar cliente
-    C-->>S: Cliente válido
-
-    S->>P: Consultar producto
-    P-->>S: Producto disponible
-
-    S->>DB: Guardar orden
-    DB-->>S: Orden guardada
-
-    S-->>U: Orden creada
-```
-
----
-
-# 35. Flujo de autenticación
-
-```mermaid
-sequenceDiagram
-    participant U as Cliente
-    participant C as Customers
-    participant S as Shopping
-
-    U->>C: Login
-    C-->>U: JWT
-
-    U->>S: Request + Bearer Token
-    S->>C: Validar autenticación
-    C-->>S: Usuario autorizado
-
-    S-->>U: Respuesta
-```
-
----
-
-# 36. Bases de datos
-
-Cada microservicio utiliza su propia base de datos.
-
-```mermaid
-flowchart TB
-    C[Customers] --> MC[(MongoDB Customers)]
-    P[Products] --> MP[(MongoDB Products)]
-    S[Shopping] --> MS[(MongoDB Shopping)]
-```
-
-Esta separación permite mantener independientes los datos de cada dominio.
-
-```text
-Customers
-    ↓
-MongoDB Customers
-
-Products
-    ↓
-MongoDB Products
-
-Shopping
-    ↓
-MongoDB Shopping
-```
-
----
-
-# 37. Comando de emergencia
-
-Si Docker presenta problemas y es necesario reconstruir todo desde cero:
-
-```bash
-docker compose down -v --remove-orphans
-```
-
-Después:
-
-```bash
-docker compose build --no-cache
-```
-
-Finalmente:
-
-```bash
-docker compose up -d
-```
-
-## Advertencia
-
-El primer comando puede eliminar los volúmenes persistentes de MongoDB.
-
-Antes de ejecutarlo, verificar que no existan datos importantes que deban conservarse.
-
----
-
-# 38. Checklist del proyecto
-
-Antes de considerar que el proyecto está funcionando correctamente:
-
-* [ ] WSL instalado.
-* [ ] Ubuntu funcionando.
-* [ ] Node.js instalado.
-* [ ] npm funcionando.
-* [ ] Docker funcionando.
-* [ ] Docker Compose funcionando.
-* [ ] MongoDB funcionando.
-* [ ] Customers funcionando en `8003`.
-* [ ] Products funcionando en `8002`.
-* [ ] Shopping funcionando en `8004`.
-* [ ] MongoDB Customers funcionando.
-* [ ] MongoDB Products funcionando.
-* [ ] MongoDB Shopping funcionando.
-* [ ] Customers conectado a su base de datos.
-* [ ] Products conectado a su base de datos.
-* [ ] Shopping conectado a su base de datos.
-* [ ] Seed de Customers ejecutado.
-* [ ] Seed de Products ejecutado.
-* [ ] Seed de Shopping ejecutado.
-* [ ] APIs probadas con `curl`.
-* [ ] Login funcionando.
-* [ ] JWT generado correctamente.
-* [ ] Autenticación funcionando.
-* [ ] Comunicación entre microservicios funcionando.
-* [ ] `.env` protegido.
-* [ ] Contraseñas y tokens fuera de GitHub.
-
----
-
-# 39. Resultado final
-
-La arquitectura final del proyecto es:
-
-```text
-                         CLIENTE
-                            |
-        +-------------------+-------------------+
-        |                   |                   |
-        v                   v                   v
-   CUSTOMERS            PRODUCTS            SHOPPING
-     :8003                :8002                :8004
-        |                   |                   |
-        v                   v                   v
- MongoDB Customers    MongoDB Products    MongoDB Shopping
-        |                                       |
-        +---------------+-----------------------+
-                        |
-                 Comunicación HTTP
-                    / Axios
-```
-
-## Resumen
-
-```text
-Customers
-- Puerto: 8003
-- Clientes
-- Login
-- JWT
-- MongoDB Customers
-
-Products
-- Puerto: 8002
-- Productos
-- MongoDB Products
-
-Shopping
-- Puerto: 8004
-- Compras
-- Órdenes
-- MongoDB Shopping
-- Comunicación con Customers y Products
-```
-
----
-
-# Conclusión
-
-El proyecto implementa una arquitectura de microservicios utilizando Node.js, Express, MongoDB y Docker.
-
-Cada servicio tiene una responsabilidad independiente y su propia base de datos:
-
-```text
-Customers → Clientes y autenticación → MongoDB Customers
-
-Products → Productos → MongoDB Products
-
-Shopping → Compras y órdenes → MongoDB Shopping
-```
-
-La comunicación entre los microservicios se realiza mediante APIs HTTP y Axios.
-
-Docker Compose permite ejecutar y administrar todos los servicios y sus bases de datos desde un mismo proyecto.
-
----
-
-## Información del proyecto
-
-**Proyecto:** Microservicios
-
-**Servicios:** Customers · Products · Shopping
-
-**Puertos:** 8002 · 8003 · 8004
-
-**Tecnologías:** Node.js · Express · MongoDB · Mongoose · Docker · Docker Compose · Axios · JWT · Git · GitHub
+**Tecnologías:** Node.js · Express · MongoDB · Mongoose · Docker · Docker Compose · JWT · Jest

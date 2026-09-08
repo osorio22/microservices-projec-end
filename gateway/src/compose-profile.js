@@ -1,4 +1,4 @@
-const { CUSTOMER_URL, SHOPPING_URL } = require('./config');
+const { CUSTOMERS_URL, SHOPPING_URL } = require('./config');
 const { APIError } = require('./utils/app-errors');
 const TIMEOUT_MS = 5000;
 
@@ -30,7 +30,7 @@ module.exports = async (req, res, next) => {
     const authorization = req.headers.authorization;
 
     const [profileResult, shopping] = await Promise.all([
-        fetchJson(`${CUSTOMER_URL}/customer/profile`, authorization).catch((err) => err),
+        fetchJson(`${CUSTOMERS_URL}/customer/profile`, authorization).catch((err) => err),
         fetchShopping(authorization)
     ]);
 

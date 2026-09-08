@@ -1,0 +1,47 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+jobs:
+  test:
+    name: Tests (${{ matrix.service }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        service: [customers, Product, shopping]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: ${{ matrix.service }}/package-lock.json
+
+      # El binario que descarga mongodb-memory-server (~120 MB) se cachea
+      # para que los tests de integración no lo bajen en cada corrida.
+      - name: Cache MongoDB binary
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/mongodb-binaries
+          key: mongodb-binaries-${{ runner.os }}
+
+      - name: Instalar dependencias
+        working-directory: ${{ matrix.service }}
+        run: npm ci
+
+      - name: Tests unitarios
+        working-directory: ${{ matrix.service }}
+        run: npm run test:unit
+
+      - name: Tests de integración
+        working-directory: ${{ matrix.service }}
+        run: npm run test:integration

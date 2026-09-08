@@ -1,6 +1,8 @@
 const express = require('express');
 
-const { PORT, requireVars } = require('./config');
+const { PORT } = require('./config');
+
+const connectDatabase = require('./database/models/connection');
 
 const expressApp = require('./express-app');
 
@@ -8,6 +10,7 @@ const StartServer = async () => {
 
     const app = express();
 
+    await connectDatabase();
     await expressApp(app);
 
     app.listen(PORT, () => {

@@ -1,0 +1,27 @@
+# Dependencias
+node_modules/
+
+# Entornos y secretos
+.env
+.env.local
+.env.*.local
+!*.env.example
+
+# Cobertura y artefactos de tests
+coverage/
+
+# Builds
+dist/
+build/
+
+# Logs
+*.log
+npm-debug.log*
+
+# Sistema operativo
+.DS_Store
+Thumbs.db
+
+# IDEs / editores
+.vscode/
+.idea/

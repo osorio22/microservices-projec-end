@@ -181,6 +181,26 @@ class ShoppingService {
                 date: new Date()
             });
 
+            const response = await fetch(
+                `http://c-customers:8003/customer/order/${customerId}`,
+                {
+                    method: 'POST',
+                    headers: {
+                        'content-type': 'application/json',
+                        authorization: `Bearer ${token}`
+                    },
+                    body: JSON.stringify(order)
+                }
+            );
+
+            if (!response.ok) {
+                throw new APIError(
+                    'PlaceOrderError',
+                    response.status,
+                    'Could not record order in customers'
+                );
+            }
+
             return FormateData(order);
 
         } catch (err) {
