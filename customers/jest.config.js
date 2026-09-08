@@ -1,4 +1,5 @@
 process.env.MONGOMS_SKIP_MD5_CHECK = 'true';
+process.env.APP_SECRET = 'test-app-secret';
 
 module.exports = {
   testEnvironment: 'node',
