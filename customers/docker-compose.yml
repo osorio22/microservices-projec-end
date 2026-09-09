@@ -8,13 +8,15 @@ services:
       PORT: 8003
       DB_URL: mongodb://customers-db:27017/customers
       APP_SECRET: dev-secret-change-me
+      PRODUCTS_URL: http://host.docker.internal:8002
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       - .:/app
       - /app/node_modules
     depends_on:
       - customers-db
-    networks:
-      - microservices-network
+
 
   customers-db:
     container_name: c-customers-db
@@ -23,12 +25,6 @@ services:
       - "27018:27017"
     volumes:
       - customers-data:/data/db
-    networks:
-      - microservices-network
 
 volumes:
   customers-data:
-
-networks:
-  microservices-network:
-    external: true

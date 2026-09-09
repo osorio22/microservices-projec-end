@@ -1,3 +1,4 @@
+const { PRODUCTS_URL } = require('../config');
 const { CustomerRepository } = require('../database');
 
 const {
@@ -320,7 +321,7 @@ async AddToCart(
     try {
 
         const response = await fetch(
-            'http://c-products:8002/products/' + product
+            PRODUCTS_URL + '/products/' + product
         );
 
         if (!response.ok) {

@@ -4,6 +4,7 @@ const config = {
     PORT: process.env.PORT || 8003,
     DB_URL: process.env.DB_URL,
     APP_SECRET: process.env.APP_SECRET,
+    PRODUCTS_URL: process.env.PRODUCTS_URL || 'http://c-products:8002',
 };
 
 config.requireVars = (...names) => {

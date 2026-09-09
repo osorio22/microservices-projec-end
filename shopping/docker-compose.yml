@@ -8,15 +8,15 @@ services:
       PORT: 8004
       DB_URL: mongodb://c-shopping-db:27017/shopping
       APP_SECRET: dev-secret-change-me
-      CUSTOMERS_URL: http://c-customers:8003
-      PRODUCTS_URL: http://c-products:8002
+      CUSTOMERS_URL: http://host.docker.internal:8003
+      PRODUCTS_URL: http://host.docker.internal:8002
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       - .:/app
       - /app/node_modules
     depends_on:
       - shopping-db
-    networks:
-      - microservices-network
 
   shopping-db:
     container_name: c-shopping-db
@@ -25,12 +25,6 @@ services:
       - "27019:27017"
     volumes:
       - shopping-data:/data/db
-    networks:
-      - microservices-network
 
 volumes:
   shopping-data:
-
-networks:
-  microservices-network:
-    external: true

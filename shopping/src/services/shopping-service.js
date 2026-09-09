@@ -1,3 +1,4 @@
+const { CUSTOMERS_URL } = require('../config');
 const { FormateData } = require('../utils');
 const { APIError, BadRequestError } = require('../utils/app-errors');
 const crypto = require('crypto');
@@ -13,7 +14,7 @@ class ShoppingService {
         try {
 
             const response = await fetch(
-                `http://c-customers:8003/customer/cart/${customerId}`,
+                `${CUSTOMERS_URL}/customer/cart/${customerId}`,
                 {
                     method: 'POST',
                     headers: {
@@ -64,7 +65,7 @@ class ShoppingService {
         try {
 
             const response = await fetch(
-                `http://c-customers:8003/customer/cart/${customerId}/${productId}`,
+                `${CUSTOMERS_URL}/customer/cart/${customerId}/${productId}`,
                 {
                     method: 'DELETE',
                     headers: {
@@ -110,7 +111,7 @@ class ShoppingService {
         try {
 
             const response = await fetch(
-                `http://c-customers:8003/customer/cart/${customerId}`,
+                `${CUSTOMERS_URL}/customer/cart/${customerId}`,
                 {
                     method: 'GET',
                     headers: {
@@ -182,7 +183,7 @@ class ShoppingService {
             });
 
             const response = await fetch(
-                `http://c-customers:8003/customer/order/${customerId}`,
+                `${CUSTOMERS_URL}/customer/order/${customerId}`,
                 {
                     method: 'POST',
                     headers: {
